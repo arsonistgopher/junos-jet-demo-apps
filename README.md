@@ -25,9 +25,9 @@ go get -u github.com/golang/protobuf/protoc-gen-go
 ```bash
 git clone https://github.com/DavidJohnGee/go-jet-demo-app.git
 cd go-jet-demo-app
-``
+```
 
-5. Create a directory called `proto` in this directory (command below). Also, copy the IDL files you previously downloaded to the `proto` directory and extract them. Note, my storage location for IDL files will not be the same as yours. Ensure you copy using the correct path and do not blindly copy the below.
+6. Create a directory called `proto` in this directory (command below). Also, copy the IDL files you previously downloaded to the `proto` directory and extract them. Note, my storage location for IDL files will not be the same as yours. Ensure you copy using the correct path and do not blindly copy the below.
 
 ```bash
 mkdir proto
