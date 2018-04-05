@@ -116,4 +116,8 @@ mv prpd_common.pb.go ./prpd
 
 Last challenge, within the `bgp_route_service.pb.go` file, replace every instance of `routing1` with `prpd`.
 
-Now...at long last, we can change directory to the demo directory itself and build the demos!
+## bgp_static_routes directory
+
+This directory contains the first demo that uses the code generated from the `.proto` files.
+
+If you want to be lazy, use [this link](https://github.com/DavidJohnGee/go-jet-demo-app/tree/master/bgp_static_routes) to go to the demo directory.
