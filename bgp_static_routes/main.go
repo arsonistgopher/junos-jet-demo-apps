@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	auth "github.com/davidjohngee/go-jet-demo-app/proto/authentication"
-	jnxBase "github.com/davidjohngee/go-jet-demo-app/proto/jnxBase"
-	prpd "github.com/davidjohngee/go-jet-demo-app/proto/prpd"
-	routing "github.com/davidjohngee/go-jet-demo-app/proto/routing"
+	auth "../proto/auth"
+	jnxType "../proto/jnx_addr"
+	prpd "../proto/prpd_common"
+	routing "../proto/bgp_route"
 
 	"google.golang.org/grpc"
 )
@@ -96,7 +96,7 @@ func getCookie() (chan uint8, chan uint64) {
 
 // This function takes the hard work out of getting a RoutePrefix instance
 func getInetPrefix(s string) *prpd.RoutePrefix {
-	inetAddr := &jnxBase.IpAddress{AddrFormat: &jnxBase.IpAddress_AddrString{AddrString: s}}
+	inetAddr := &jnxType.IpAddress{AddrFormat: &jnxType.IpAddress_AddrString{AddrString: s}}
 	inetPrefixInet := &prpd.RoutePrefix_Inet{Inet: inetAddr}
 	inetPrefix := &prpd.RoutePrefix{RoutePrefixAf: inetPrefixInet}
 	return inetPrefix
@@ -196,8 +196,8 @@ func main() {
 
 		// Build next hop table for adds
 		for _, n := range r.NextHops {
-			nhAddr := &jnxBase.IpAddress{AddrFormat: &jnxBase.IpAddress_AddrString{AddrString: n}}
-			nhAddrSlice := []*jnxBase.IpAddress{nhAddr}
+			nhAddr := &jnxType.IpAddress{AddrFormat: &jnxType.IpAddress_AddrString{AddrString: n}}
+			nhAddrSlice := []*jnxType.IpAddress{nhAddr}
 
 			req <- reqCookie
 			cookie := <-res
