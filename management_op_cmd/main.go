@@ -47,7 +47,7 @@ type config struct {
 func main() {
 
 	log.Println("------------------------------")
-	log.Println("OpenConfig OpCommand Test Tool")
+	log.Println("Junos JET OpCommand Test Tool")
 	log.Println("------------------------------")
 	log.Print("Run the app with -h for options\n\n")
 

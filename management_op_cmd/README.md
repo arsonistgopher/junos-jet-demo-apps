@@ -1,6 +1,6 @@
 ## OpCmd Tester App
 
-This simple application tests the Junos OpenConfig OpCommand JET API. In super simple terms, the script consumes the JET IDL (`.proto`) and calls the `ExecuteOpCommand` service via gRPC.
+This simple application tests the Junos JET OpCommand gRPC API. In super simple terms, the script consumes the JET IDL (`.proto`) and calls the `ExecuteOpCommand` service via gRPC.
 
 The application itself is available in three forms pre-compiled and ready to use. This is handy if you're not familiar with the build process for `.proto` based applications. Read more on this [here](https://github.com/DavidJohnGee/go-jet-demo-app) if you want to build this from source!
 
@@ -45,7 +45,7 @@ Here is an example run on a system configured to accept clear-text gRPC.
 ```bash
 ./opcmdosx -command "show system info" -host vmx01 -port 50051 -user jet
 2018/05/02 21:29:43 ------------------------------
-2018/05/02 21:29:43 OpenConfig OpCommand Test Tool
+2018/05/02 21:29:43 Junos JET OpCommand Test Tool
 2018/05/02 21:29:43 ------------------------------
 2018/05/02 21:29:43 Run the app with -h for options
 
@@ -69,7 +69,7 @@ Note, the comment `Unrecognised format type`. This means no argument was passed 
 ```bash
 ./opcmdosx -command "show system info" -host vmx01 -port 50051 -user jet -format JSON
 2018/05/02 21:31:00 ------------------------------
-2018/05/02 21:31:00 OpenConfig OpCommand Test Tool
+2018/05/02 21:31:00 Junos JET OpCommand Test Tool
 2018/05/02 21:31:00 ------------------------------
 2018/05/02 21:31:00 Run the app with -h for options
 
@@ -111,7 +111,7 @@ Note, the comment `Unrecognised format type`. This means no argument was passed 
 }
 ```
 
-For the OpenConfig gRPC JET APIs to be functional, you are required to install the "network-agent" package and the "openconfig" packages on Junos.
+For the gRPC JET APIs to be functional, you are required to install the "network-agent" package and the "openconfig" packages on Junos.
 
 Once these are installed, some basic configuration is required to enable clear-text gRPC. I do not recommend this for anything other than testing. Always use TLS for production systems and mutual TLS preferably.
 
