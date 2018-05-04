@@ -23,7 +23,7 @@ go get -u github.com/golang/protobuf/protoc-gen-go
 5. Next, clone this repository and enter the directory.
 
 ```bash
-git clone https://github.com/DavidJohnGee/go-jet-demo-app.git
+git clone https://github.com/arsonistgopher/junos-jet-demo-apps.git
 cd go-jet-demo-app
 ```
 
@@ -40,8 +40,17 @@ Next, we need to compile four different proto files and put them in the right pl
 source runme.sh
 ```
 
-## bgp_static_routes directory
+## Demo Applications
 
-This directory contains the first demo that uses the code generated from the `.proto` files.
+Pre-compiled versions exist, so don't worry if you're not an expert with `Go` or the `protoc` tool.
+*Warning: Pre-compiled applications use the 18.1 version of IDLs, as such they might not work as expected with older systems*
 
-If you want to be lazy, use [this link](https://github.com/DavidJohnGee/go-jet-demo-app/tree/master/bgp_static_routes) to go to the demo directory and build the application using `go build`.
+__bgp_static_routes directory__
+
+This application inserts BGP-Static routes in to Junos via the JET API over gRPC using the compiled IDL files in Go! 
+
+
+__management_op_cmd directory__
+
+This application executes an operational command via the JET management API over gRPC using the compiled IDL files in Go!
+

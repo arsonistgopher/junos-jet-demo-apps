@@ -18,16 +18,21 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"strings"
 	"syscall"
 
-	auth "github.com/davidjohngee/go-jet-demo-app/proto/auth"
-	mng "github.com/davidjohngee/go-jet-demo-app/proto/management"
+	auth "github.com/arsonistgopher/junos-jet-demo-apps/proto/auth"
+	mng "github.com/arsonistgopher/junos-jet-demo-apps/proto/management"
 	"golang.org/x/crypto/ssh/terminal"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // This is a cleanliness thing. Let's keep all the config data together.
@@ -40,6 +45,7 @@ type config struct {
 	clientid   *string                  // ClientID of session
 	timeout    *int                     // Timeout of session in seconds
 	passwd     *string                  // Password for user
+	certdir    *string                  // Directory where certs are stored
 	pbfmt      *mng.OperationFormatType // Format type to return in format check
 	hoststring string                   // Full semi-colon tokensied string
 }
@@ -60,13 +66,15 @@ func main() {
 	cfg.command = flag.String("command", "show version", "Operational command")
 	cfg.format = flag.String("format", "xml", "XML or JSON")
 	cfg.host = flag.String("host", "127.0.0.1", "Hostname or IP Address")
-	cfg.port = flag.String("port", "50051", "Port that the grpc server is listening on")
+	cfg.port = flag.String("port", "32767", "Port that the grpc server is listening on.")
 	cfg.user = flag.String("user", "jet", "Username for authentication")
 	cfg.clientid = flag.String("cid", "42", "Client ID for session")
 	cfg.timeout = flag.Int("timeout", 10, "Timeout in seconds for JET")
 	cfg.passwd = flag.String("passwd", "", "Password for Junos host. Note, not mandatory")
+	cfg.certdir = flag.String("certdir", "", "Directory with client.crt, client.key, CA.crt")
 	flag.Parse()
 
+	// Generate host string in pattern "host:port"
 	cfg.hoststring = *cfg.host + ":" + *cfg.port
 
 	// Grab password if not set
@@ -80,7 +88,7 @@ func main() {
 	}
 
 	// Next, check for XML vs JSON vs CLI
-	switch *cfg.format {
+	switch strings.ToUpper(*cfg.format) {
 	case "XML":
 		*cfg.pbfmt = mng.OperationFormatType_OPERATION_FORMAT_XML
 	case "JSON":
@@ -91,11 +99,58 @@ func main() {
 		log.Println("Unrecognised format type. Defaulting to XML")
 		*cfg.pbfmt = mng.OperationFormatType_OPERATION_FORMAT_XML
 	}
-	// End of setup
+
+	// gRPC options
+	var opts []grpc.DialOption
+
+	// Are we going to run with TLS?
+	runningWithTLS := false
+	if *cfg.certdir != "" {
+		runningWithTLS = true
+	}
+
+	// If we're running with TLS
+	if runningWithTLS {
+
+		// Grab x509 cert/key for client
+		cert, err := tls.LoadX509KeyPair(fmt.Sprintf("%s/client.crt", *cfg.certdir), fmt.Sprintf("%s/client.key", *cfg.certdir))
+
+		if err != nil {
+			log.Fatalf("Could not load certFile: %v", err)
+		}
+		// Create certPool for CA
+		certPool := x509.NewCertPool()
+
+		// Get CA
+		ca, err := ioutil.ReadFile(fmt.Sprintf("%s/CA.crt", *cfg.certdir))
+		if err != nil {
+			log.Fatalf("could not read ca certificate: %s", err)
+		}
+
+		// Append CA cert to pool
+		if ok := certPool.AppendCertsFromPEM(ca); !ok {
+			log.Fatal("Failed to append client certs")
+		}
+
+		// build creds
+		creds := credentials.NewTLS(&tls.Config{
+			RootCAs:      certPool,
+			Certificates: []tls.Certificate{cert},
+			ServerName:   *cfg.host,
+		})
+
+		if err != nil {
+			log.Fatalf("Could not load clientCert: %v", err)
+		}
+
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else { // Else we're not running with TLS
+		opts = append(opts, grpc.WithInsecure())
+	}
 
 	// Set up a connection to the server.
 	// This script for ease tests without TLS. For production systems, do not do this.
-	conn, err := grpc.Dial(cfg.hoststring, grpc.WithInsecure())
+	conn, err := grpc.Dial(cfg.hoststring, opts...)
 
 	if err != nil {
 		log.Fatalf("Did not connect: %v\n", err)
