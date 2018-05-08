@@ -18,25 +18,31 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	auth "../proto/auth"
-	jnxType "../proto/jnx_addr"
-	prpd "../proto/prpd_common"
-	routing "../proto/bgp_route"
+	auth "github.com/arsonistgopher/junos-jet-demo-apps/proto/auth"
+	routing "github.com/arsonistgopher/junos-jet-demo-apps/proto/bgp_route"
+	jnxType "github.com/arsonistgopher/junos-jet-demo-apps/proto/jnx_addr"
+	prpd "github.com/arsonistgopher/junos-jet-demo-apps/proto/prpd_common"
+	"golang.org/x/crypto/ssh/terminal"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
 	// reqCookie is a const for requesting a unique cookie
-	reqCookie = uint8(0)
-	add       = 0
-	del       = 1
+	reqCookie = uint8(0) // Cookie
+	add       = 0        // Verb for add
+	del       = 1        // Verb for delete
 )
 
 // custom struct route type for loading our configuration based routes.
@@ -47,13 +53,7 @@ type route struct {
 }
 
 // custom struct route type for loading our configuration based routes.
-type core struct {
-	Address    string `toml:"address"`
-	Username   string `toml:"username"`
-	Passwd     string `toml:"passwd"`
-	Clientid   string `toml:"clientid"`
-	JetTimeout int    `toml:"jetTimeout"`
-
+type basics struct {
 	LocalPref  uint32 `toml:"localPref"`
 	RoutePref  uint32 `toml:"routePref"`
 	AsPathStr  string `toml:"asPathStr"`
@@ -62,9 +62,24 @@ type core struct {
 }
 
 // TOML based config struct for loading from a configuration file.
-type tomlConfig struct {
-	Core   core
+type routes struct {
+	Basics basics
 	Routes []route `toml:"route"`
+}
+
+// This is a cleanliness thing. Let's keep all the config data together.
+type config struct {
+	routesfile *string // Location of file with routes
+	format     *string // Data format required (XML / JSON)
+	host       *string // Hostname or IP address of Junos host
+	port       *string // Port that the gRPC server is listening on
+	user       *string // Username of Junos host
+	clientid   *string // ClientID of session
+	timeout    *int    // Timeout of session in seconds
+	passwd     *string // Password for user
+	certdir    *string // Directory where certs are stored
+	verb       *string // Verb, add or delete
+	hoststring string  // Full semi-colon tokensied string
 }
 
 // getCookie() returns a unique cookie using channels.
@@ -103,14 +118,44 @@ func getInetPrefix(s string) *prpd.RoutePrefix {
 }
 
 func main() {
-	// Dirty flag for quick testing of verb
-	var verb = flag.String("verb", "add", "Verb is 'add' or 'del'")
+	log.Println("--------------------------------------")
+	log.Println("Junos JET BGP-Static Route Test Client")
+	log.Println("--------------------------------------")
+	log.Print("Run the app with -h for options\n\n")
+
+	// Create config instance
+	var cfg config
+	cfg = config{}
+
+	// Gather the config data including password from the terminal
+	cfg.routesfile = flag.String("routesfile", "routes.toml", "File containing routes")
+	cfg.host = flag.String("host", "127.0.0.1", "Hostname or IP Address")
+	cfg.port = flag.String("port", "32767", "Port that the grpc server is listening on.")
+	cfg.user = flag.String("user", "jet", "Username for authentication")
+	cfg.clientid = flag.String("cid", "42", "Client ID for session")
+	cfg.timeout = flag.Int("timeout", 10, "Timeout in seconds for JET")
+	cfg.passwd = flag.String("passwd", "", "Password for Junos host. Note, not mandatory")
+	cfg.certdir = flag.String("certdir", "", "Directory with client.crt, client.key, CA.crt")
+	cfg.verb = flag.String("verb", "add", "Verb is 'add' or 'del'")
 	flag.Parse()
+
+	// Grab password if not set. Do this first. Saves time if the user gets it wrong
+	if *cfg.passwd == "" {
+		log.Print("Enter Password: ")
+		bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			log.Fatalf("Err: %v\n", err)
+		}
+		*cfg.passwd = string(bytePassword)
+	}
+
+	// Generate host string in pattern "host:port"
+	cfg.hoststring = *cfg.host + ":" + *cfg.port
 
 	// Oper is the operational verb: add/del routes
 	oper := add
 
-	switch *verb {
+	switch *cfg.verb {
 	case "add":
 		oper = add
 	case "del":
@@ -120,10 +165,10 @@ func main() {
 	}
 
 	// Let's grab the configuration
-	var config tomlConfig
+	var rts routes
 
 	// Marshall!
-	if _, err := toml.DecodeFile("config.toml", &config); err != nil {
+	if _, err := toml.DecodeFile(*cfg.routesfile, &rts); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -137,38 +182,90 @@ func main() {
 	// Create a slice of BgpRouteMatches (for deletion)
 	var rtdelslice []*routing.BgpRouteMatch
 
+	// gRPC options
+	var opts []grpc.DialOption
+
+	// Are we going to run with TLS?
+	runningWithTLS := false
+	if *cfg.certdir != "" {
+		runningWithTLS = true
+	}
+
+	// If we're running with TLS
+	if runningWithTLS {
+
+		// Grab x509 cert/key for client
+		cert, err := tls.LoadX509KeyPair(fmt.Sprintf("%s/client.crt", *cfg.certdir), fmt.Sprintf("%s/client.key", *cfg.certdir))
+
+		if err != nil {
+			log.Fatalf("Could not load certFile: %v", err)
+		}
+		// Create certPool for CA
+		certPool := x509.NewCertPool()
+
+		// Get CA
+		ca, err := ioutil.ReadFile(fmt.Sprintf("%s/CA.crt", *cfg.certdir))
+		if err != nil {
+			log.Fatalf("Could not read ca certificate: %s", err)
+		}
+
+		// Append CA cert to pool
+		if ok := certPool.AppendCertsFromPEM(ca); !ok {
+			log.Fatal("Failed to append client certs")
+		}
+
+		// build creds
+		creds := credentials.NewTLS(&tls.Config{
+			RootCAs:      certPool,
+			Certificates: []tls.Certificate{cert},
+			ServerName:   *cfg.host,
+		})
+
+		if err != nil {
+			log.Fatalf("Could not load clientCert: %v", err)
+		}
+
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else { // Else we're not running with TLS
+		opts = append(opts, grpc.WithInsecure())
+	}
+
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(config.Core.Address, grpc.WithInsecure())
+	conn, err := grpc.Dial(cfg.hoststring, opts...)
 
 	if err != nil {
 		log.Fatalf("Did not connect: %v", err)
 	}
-	defer log.Print("Closing connection to ", config.Core.Address)
+	defer log.Print("Closing connection to ", cfg.hoststring)
 	defer conn.Close()
 
 	c := auth.NewLoginClient(conn)
 
-	r, err := c.LoginCheck(context.Background(), &auth.LoginRequest{
-		UserName: config.Core.Username,
-		Password: config.Core.Passwd,
-		ClientId: config.Core.Clientid,
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*cfg.timeout)*time.Second)
+	r, err := c.LoginCheck(ctx, &auth.LoginRequest{
+		UserName: *cfg.user,
+		Password: *cfg.passwd,
+		ClientId: *cfg.clientid,
 	})
 
 	if err != nil {
 		log.Fatalf("Could not connect. Check IP address or domain name: %v", err)
 	} else {
 		if r.GetResult() {
-			log.Printf("Connect to %s: SUCCESS", config.Core.Address)
+			log.Printf("Connect to %s: SUCCESS", cfg.hoststring)
 		}
 	}
 
-	bgpc := routing.NewBgpRouteClient(conn)
+	cancel()
 
-	bgprcreply, err := bgpc.BgpRouteInitialize(context.Background(), &routing.BgpRouteInitializeRequest{})
+	bgpc := routing.NewBgpRouteClient(conn)
+	ctx, cancel = context.WithTimeout(context.Background(), time.Duration(*cfg.timeout)*time.Second)
+	bgprcreply, err := bgpc.BgpRouteInitialize(ctx, &routing.BgpRouteInitializeRequest{})
 
 	if err != nil {
 		log.Fatalf("Could not connect to BGP service: %v", err)
 	}
+	cancel()
 
 	bgpInitReply := routing.BgpRouteInitializeReply_BgpRouteInitializeStatus(bgprcreply.Status)
 
@@ -186,7 +283,7 @@ func main() {
 	rtTable := &prpd.RouteTable{RtTableFormat: rtt}
 
 	// Let's build the slice of routes for adding and deletion
-	for _, r := range config.Routes {
+	for _, r := range rts.Routes {
 		inetPrefix := getInetPrefix(r.Prefix)
 
 		// Build the BgpRouteMatch var for deletion
@@ -209,9 +306,9 @@ func main() {
 				ProtocolNexthops: nhAddrSlice,
 				Protocol:         routing.RouteProtocol_PROTO_BGP_STATIC,
 				PathCookie:       cookie,
-				RoutePreference:  &routing.BgpAttrib32{Value: config.Core.RoutePref},
-				LocalPreference:  &routing.BgpAttrib32{Value: config.Core.LocalPref},
-				Aspath:           &routing.AsPath{AspathString: config.Core.AsPathStr},
+				RoutePreference:  &routing.BgpAttrib32{Value: rts.Basics.RoutePref},
+				LocalPreference:  &routing.BgpAttrib32{Value: rts.Basics.LocalPref},
+				Aspath:           &routing.AsPath{AspathString: rts.Basics.AsPathStr},
 			}
 
 			rtaddslice = append(rtaddslice, routeParams)
@@ -221,7 +318,7 @@ func main() {
 	routeUpdReq := &routing.BgpRouteUpdateRequest{BgpRoutes: rtaddslice}
 
 	if oper == add {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Core.JetTimeout)*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*cfg.timeout)*time.Second)
 		defer cancel()
 
 		// This go routine enforces the jetTimeout.
@@ -245,7 +342,7 @@ func main() {
 	if oper == del {
 		removeRequest := &routing.BgpRouteRemoveRequest{OrLonger: false, BgpRoutes: rtdelslice}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Core.JetTimeout)*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*cfg.timeout)*time.Second)
 		defer cancel()
 
 		// This go routine enforces the jetTimeout.

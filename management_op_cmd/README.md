@@ -4,7 +4,13 @@ This simple application tests the Junos JET OpCommand gRPC API. In super simple 
 
 The application itself is available in three forms pre-compiled and ready to use. This is handy if you're not familiar with the build process for `.proto` based applications. Read more on this [here](https://github.com/arsonistgopher/junos-jet-demo-apps) if you want to build this from source!
 
-Please note, this application requires that PKI has been dealt with. This in turn means, Junos has a CA certificate, a local certificate and a local key. In addition, the application also requires it's own certificate and key. The result is secure, mutually authenticated TLS between this application and Junos.
+Please note, this application requires that PKI has been dealt with. This in turn means, Junos has a CA certificate, a local certificate and a local key. In addition, the application also requires it's own certificate and key. The result is secure, mutually authenticated TLS between this application and Junos. Below is a config snippet for Junos to set the basics up (assuming basic knowledge of creating the PKI tooling and CA details on Junos).
+
+```bash
+set system services extension-service request-response grpc ssl local-certificate vmx01.domain
+set system services extension-service request-response grpc ssl mutual-authentication certificate-authority CA
+set system services extension-service request-response grpc ssl mutual-authentication client-certificate-request require-certificate
+```
 
 * May 2018 - I'm working on a blog post which describes configuring a full PKI example with Junos. Patience please! *
 
@@ -53,7 +59,7 @@ Usage of ./management_op_cmd-osx-0.1:
 Here is an example run on a system configured to accept clear-text gRPC.
 
 ```bash
-./management_op_cmd-osx-0.1 -certdir CLIENTCERT -command "show system information" -host vmx01.corepipe.co.uk
+./management_op_cmd-osx-0.1 -certdir CLIENTCERT -command "show system information" -host vmx01.domain
 2018/05/04 14:54:06 ------------------------------
 2018/05/04 14:54:06 Junos JET OpCommand Test Tool
 2018/05/04 14:54:06 ------------------------------
@@ -61,7 +67,7 @@ Here is an example run on a system configured to accept clear-text gRPC.
 
 2018/05/04 14:54:06 Enter Password:
 2018/05/04 14:54:08 Unrecognised format type. Defaulting to XML
-2018/05/04 14:54:08 Connect to vmx01.corepipe.co.uk successful
+2018/05/04 14:54:08 Connect to vmx01.domain successful
 
 ---Data---
 
@@ -77,14 +83,14 @@ Here is an example run on a system configured to accept clear-text gRPC.
 Note, the comment `Unrecognised format type`. This means no argument was passed in. Here is the same inputs but this time with a request for `JSON` based output.
 
 ```bash
-./management_op_cmd-osx-0.1 -certdir CLIENTCERT -command "show system information" -host vmx01.corepipe.co.uk -format json
+./management_op_cmd-osx-0.1 -certdir CLIENTCERT -command "show system information" -host vmx01.domain -format json
 2018/05/04 14:55:49 ------------------------------
 2018/05/04 14:55:49 Junos JET OpCommand Test Tool
 2018/05/04 14:55:49 ------------------------------
 2018/05/04 14:55:49 Run the app with -h for options
 
 2018/05/04 14:55:49 Enter Password:
-2018/05/04 14:55:52 Connect to vmx01.corepipe.co.uk successful
+2018/05/04 14:55:52 Connect to vmx01.domain successful
 
 ---Data---
 
