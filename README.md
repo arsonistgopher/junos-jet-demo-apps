@@ -54,3 +54,6 @@ __management_op_cmd directory__
 
 This application executes an operational command via the JET management API over gRPC using the compiled IDL files in Go!
 
+__mqtt_bridge__
+
+This application bridges messages received on a configurable topic on the MQTT broker to `eventd`, meaning MQTT messages can be used to trigger op scripts or other things on Junos or any system consuming Junos event messages.
