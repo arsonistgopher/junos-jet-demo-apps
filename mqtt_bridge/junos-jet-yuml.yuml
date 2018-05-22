@@ -1,0 +1,8 @@
+// {type: state}
+(Start) ->(Main GoRoutine|Relay signals to GR channels loop) -> (Start Listener GR)
+(Start Listener GR) -> (Listener GR|Copy MQTT message to logger system)
+(Main GoRoutine|Relay signals to GR channels loop)  -> (Start log file rotator)
+(Start log file rotator) -> [Recvd int/kill signal] -> (Exit tasks)
+(Listener GR|Copy MQTT message to logger system) -> [Recvd int/kill signal] -> (Exit tasks)
+(Exit tasks) -> (Exit\(0\))
+
