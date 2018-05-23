@@ -47,8 +47,8 @@ We have to build this from source. Fear not, it's easy with Go! Here's the build
 `git clone https://github.com/arsonistgopher/junos-jet-demo-apps.git`
 # Change directory to junos-jet-demo-apps
 cd mqtt_bridge
-# Restore dependencies (requires godep tool)
-godep restore
+# Restore dependencies (requires dep tool)
+dep ensure
 # Build the binary for Junos
 GOOS=freebsd GOARCH=386 go build -o mqttbridge
 ```
